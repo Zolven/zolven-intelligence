@@ -51,6 +51,7 @@ import {
   resolveClaudeNativeThinkingLevelMap,
   resolveClaudeSonnet5ModelIdentity,
   requiresClaudeAdaptiveThinking,
+  requiresClaudeBetweenToolsThinking,
   supportsClaudeAdaptiveThinking,
   supportsClaudeNativeMaxEffort,
   supportsClaudeNativeXhighEffort,
@@ -1302,7 +1303,11 @@ function buildParams(
   toolProjection?: AnthropicToolProjection;
 } {
   const mandatoryAdaptiveThinking = requiresClaudeAdaptiveThinking(model);
-  const replayThinkingEnabled = mandatoryAdaptiveThinking || options?.thinkingEnabled === true;
+  const betweenToolsThinking = requiresClaudeBetweenToolsThinking(model);
+  // Sonnet 5.5 is never thinking-free: its off mode still returns thinking blocks that
+  // must replay unchanged (preserved thinking) and still rejects forced tool choice.
+  const replayThinkingEnabled =
+    mandatoryAdaptiveThinking || betweenToolsThinking || options?.thinkingEnabled === true;
   const { cacheControl } = getCacheControl(model, options?.cacheRetention);
   const system = buildAnthropicSystemBlocks(context.systemPrompt, isOAuthTokenResult, cacheControl);
   const compat = context.tools ? getAnthropicCompat(model) : undefined;
@@ -1396,7 +1401,11 @@ function buildParams(
         };
       }
     } else if (options?.thinkingEnabled === false) {
-      params.thinking = { type: "disabled" };
+      // between_tools takes no other thinking field and no effort above high; off sends no effort.
+      // The Anthropic SDK types predate Sonnet 5.5's between_tools setting.
+      params.thinking = betweenToolsThinking
+        ? ({ type: "between_tools" } as unknown as MessageCreateParamsStreaming["thinking"])
+        : { type: "disabled" };
     }
   }
 

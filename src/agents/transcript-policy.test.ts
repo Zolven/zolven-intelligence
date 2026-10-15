@@ -456,6 +456,14 @@ describe("resolveTranscriptPolicy", () => {
     });
     expect(sonnet45.dropThinkingBlocks).toBe(false);
 
+    // Sonnet 5.5 binds thinking to the conversation: earlier blocks must replay unchanged
+    const sonnet55 = resolveTranscriptPolicy({
+      provider: "custom-anthropic-proxy",
+      modelId: "claude-sonnet-5-5",
+      modelApi: "anthropic-messages",
+    });
+    expect(sonnet55.dropThinkingBlocks).toBe(false);
+
     // Legacy Sonnet 3.7 via custom proxy: SHOULD drop
     const sonnet37 = resolveTranscriptPolicy({
       provider: "custom-anthropic-proxy",

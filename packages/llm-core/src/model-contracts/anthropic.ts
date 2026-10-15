@@ -85,7 +85,10 @@ export function requiresClaudeMandatoryAdaptiveThinking(ref: ClaudeModelRef): bo
   );
 }
 
-/** Resolve Claude Sonnet 5 through direct ids, cloud ids, or deployment metadata. */
+/**
+ * Resolve the Claude Sonnet 5 family (Sonnet 5 and Sonnet 5.5) through direct ids,
+ * cloud ids, or deployment metadata. Check Sonnet 5.5 first where its contract differs.
+ */
 export function resolveClaudeSonnet5ModelIdentity(ref: ClaudeModelRef): string | undefined {
   const normalized = resolveClaudeModelIdentity(ref);
   const match = /(?:^|-)claude-sonnet-5(?=$|[^a-z0-9])/.exec(normalized);
@@ -93,6 +96,17 @@ export function resolveClaudeSonnet5ModelIdentity(ref: ClaudeModelRef): string |
     return undefined;
   }
   return normalized.slice((match.index ?? 0) + (match[0].startsWith("-") ? 1 : 0));
+}
+
+/** Resolve the Sonnet 5.5 contract without matching other Sonnet 5 generations. */
+export function resolveClaudeSonnet55ModelIdentity(ref: ClaudeModelRef): string | undefined {
+  const normalized = resolveClaudeModelIdentity(ref);
+  return /^claude-sonnet-5-5(?=$|[^a-z0-9])/.test(normalized) ? normalized : undefined;
+}
+
+/** Sonnet 5.5 rejects disabled thinking; its off mode is between-tool progress updates. */
+export function requiresClaudeBetweenToolsThinking(ref: ClaudeModelRef): boolean {
+  return resolveClaudeSonnet55ModelIdentity(ref) !== undefined;
 }
 
 /** Return whether a Claude model supports adaptive thinking. */

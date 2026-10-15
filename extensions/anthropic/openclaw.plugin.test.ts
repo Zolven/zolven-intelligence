@@ -39,17 +39,20 @@ const manifest = JSON.parse(
 ) as AnthropicManifest;
 
 describe("Anthropic plugin manifest", () => {
-  it("publishes the exact Claude Sonnet 5 API contract", () => {
+  it.each([
+    { id: "claude-sonnet-5", name: "Claude Sonnet 5", cacheRead: 0.2 },
+    { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5", cacheRead: 0.1 },
+  ])("publishes the exact $name API contract", ({ id, name, cacheRead }) => {
     const models = manifest.modelCatalog?.providers?.anthropic?.models ?? [];
-    expect(models.find((model) => model.id === "claude-sonnet-5")).toEqual({
-      id: "claude-sonnet-5",
-      name: "Claude Sonnet 5",
+    expect(models.find((model) => model.id === id)).toEqual({
+      id,
+      name,
       reasoning: true,
       input: ["text", "image"],
       mediaInput: {
         image: { maxSidePx: 2576, preferredSidePx: 2576, tokenMode: "provider" },
       },
-      cost: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
+      cost: { input: 2, output: 10, cacheRead, cacheWrite: 2.5 },
       contextWindow: 1_000_000,
       maxTokens: 128_000,
       thinkingLevelMap: { xhigh: "xhigh", max: "max" },

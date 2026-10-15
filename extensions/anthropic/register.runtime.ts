@@ -31,6 +31,7 @@ import {
   resolveClaudeFable5ModelIdentity,
   resolveClaudeModelIdentity,
   resolveClaudeMythos5ModelIdentity,
+  resolveClaudeSonnet55ModelIdentity,
   resolveClaudeSonnet5ModelIdentity,
   resolveClaudeThinkingProfile,
   supportsClaudeAdaptiveThinking,
@@ -66,20 +67,15 @@ const ANTHROPIC_OPUS_47_DOT_MODEL_ID = "claude-opus-4.7";
 const ANTHROPIC_GA_1M_CONTEXT_TOKENS = 1_048_576;
 const ANTHROPIC_EXACT_1M_CONTEXT_TOKENS = 1_000_000;
 const ANTHROPIC_MODERN_MAX_OUTPUT_TOKENS = 128_000;
-// Anthropic's introductory rate expires at the documented UTC month boundary.
-const ANTHROPIC_SONNET_5_STANDARD_PRICING_START_MS = Date.UTC(2026, 8, 1);
-const ANTHROPIC_SONNET_5_PROMOTIONAL_COST = {
+// Anthropic cancelled Sonnet 5's September 2026 rise to $3/$15; $2/$10 is now standard.
+const ANTHROPIC_SONNET_5_COST = {
   input: 2,
   output: 10,
   cacheRead: 0.2,
   cacheWrite: 2.5,
 };
-const ANTHROPIC_SONNET_5_STANDARD_COST = {
-  input: 3,
-  output: 15,
-  cacheRead: 0.3,
-  cacheWrite: 3.75,
-};
+// Sonnet 5.5 bills cache hits at 0.05x input instead of the standard 0.1x.
+const ANTHROPIC_SONNET_55_COST = { ...ANTHROPIC_SONNET_5_COST, cacheRead: 0.1 };
 const ANTHROPIC_OPUS_46_MODEL_ID = "claude-opus-4-6";
 const ANTHROPIC_OPUS_46_DOT_MODEL_ID = "claude-opus-4.6";
 const ANTHROPIC_OPUS_47_TEMPLATE_MODEL_IDS = [
@@ -95,10 +91,10 @@ const ANTHROPIC_SETUP_TOKEN_NOTE_LINES = [
   `If you want a direct API billing path instead, use ${formatCliCommand("openclaw models auth login --provider anthropic --method api-key --set-default")} or ${formatCliCommand("openclaw models auth login --provider anthropic --method cli --set-default")}.`,
 ] as const;
 
-function resolveAnthropicSonnet5Cost(nowMs: number = Date.now()) {
-  return nowMs >= ANTHROPIC_SONNET_5_STANDARD_PRICING_START_MS
-    ? ANTHROPIC_SONNET_5_STANDARD_COST
-    : ANTHROPIC_SONNET_5_PROMOTIONAL_COST;
+function resolveAnthropicSonnet5Cost(modelId: string) {
+  return resolveClaudeSonnet55ModelIdentity({ id: modelId })
+    ? ANTHROPIC_SONNET_55_COST
+    : ANTHROPIC_SONNET_5_COST;
 }
 
 const CLAUDE_CLI_CANONICAL_ALLOWLIST_REFS = CLAUDE_CLI_DEFAULT_ALLOWLIST_REFS.map((ref) =>
@@ -309,7 +305,7 @@ function buildAnthropicForwardCompatModel(
     cost: isAnthropicMandatoryClaude5Model(trimmedModelId)
       ? { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 }
       : isAnthropicSonnet5Model(trimmedModelId) && provider === PROVIDER_ID
-        ? resolveAnthropicSonnet5Cost()
+        ? resolveAnthropicSonnet5Cost(trimmedModelId)
         : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: resolveAnthropicFixedContextWindow(trimmedModelId) ?? 200_000,
     maxTokens: isAnthropic128kOutputModel(trimmedModelId)
@@ -591,7 +587,7 @@ function applyAnthropicSonnet5Cost(params: {
   if (!isAnthropicSonnet5Model(params.modelId)) {
     return undefined;
   }
-  const cost = resolveAnthropicSonnet5Cost();
+  const cost = resolveAnthropicSonnet5Cost(params.modelId);
   if (
     params.model.cost.input === cost.input &&
     params.model.cost.output === cost.output &&

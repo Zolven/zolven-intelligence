@@ -10,6 +10,7 @@ import {
   PASSTHROUGH_GEMINI_REPLAY_HOOKS,
   resolveClaudeFable5ModelIdentity,
   resolveClaudeMythos5ModelIdentity,
+  resolveClaudeSonnet55ModelIdentity,
   resolveClaudeSonnet5ModelIdentity,
   resolveClaudeThinkingProfile,
   requiresClaudeDefaultSampling,
@@ -61,6 +62,27 @@ describe("Claude model contracts", () => {
     expect(supportsClaudeNativeMaxEffort({ id: "claude-mythos-5" })).toBe(true);
     expect(supportsClaudeNativeXhighEffort({ id: "anthropic.claude-mythos-5" })).toBe(true);
     expect(requiresClaudeDefaultSampling({ id: "claude-mythos-5" })).toBe(true);
+  });
+
+  it("separates Claude Sonnet 5.5 from Sonnet 5 inside the Sonnet 5 family", () => {
+    for (const id of [
+      "claude-sonnet-5-5",
+      "anthropic/claude-sonnet-5.5",
+      "us.anthropic.claude-sonnet-5-5-v1:0",
+      "claude-sonnet-5-5@20261001",
+    ]) {
+      expect(resolveClaudeSonnet55ModelIdentity({ id }), id).toMatch(/^claude-sonnet-5-5/);
+      expect(resolveClaudeSonnet5ModelIdentity({ id }), id).toMatch(/^claude-sonnet-5-5/);
+    }
+    expect(
+      resolveClaudeSonnet55ModelIdentity({
+        id: "production-claude",
+        params: { canonicalModelId: "claude-sonnet-5-5" },
+      }),
+    ).toBe("claude-sonnet-5-5");
+    for (const id of ["claude-sonnet-5", "claude-sonnet-5-20260901", "claude-sonnet-5-50"]) {
+      expect(resolveClaudeSonnet55ModelIdentity({ id }), id).toBeUndefined();
+    }
   });
 
   it("does not classify later numeric model versions as supported aliases", () => {
@@ -326,6 +348,18 @@ describe("buildProviderReplayFamilyHooks", () => {
       },
     );
   });
+
+  it.each(["claude-sonnet-5-5", "us.anthropic.claude-sonnet-5-5-v1:0"])(
+    "keeps earlier Claude Sonnet 5.5 thinking blocks in native Anthropic replay (%s)",
+    (modelId) => {
+      const policy = NATIVE_ANTHROPIC_REPLAY_HOOKS.buildReplayPolicy?.({
+        provider: "anthropic",
+        modelApi: "anthropic-messages",
+        modelId,
+      } as never);
+      expect(policy?.dropThinkingBlocks ?? false).toBe(false);
+    },
+  );
 });
 
 describe("resolveClaudeThinkingProfile", () => {
