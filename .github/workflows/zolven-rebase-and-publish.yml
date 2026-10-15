@@ -413,6 +413,7 @@ jobs:
           # --version never loads the agent/channel chunks; prove every import
           # they make from registry-installed @openclaw/* packages resolves.
           node scripts/check-published-openclaw-imports.mjs "$prefix/lib/node_modules/openclaw"
+          node scripts/smoke-installed-channel-load.mjs "$prefix"
           echo "Smoke install OK: openclaw@${installed_version} (bins: zolven-intelligence, openclaw)"
 
       - name: Resolve release gate
