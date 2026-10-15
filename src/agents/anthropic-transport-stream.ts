@@ -13,7 +13,6 @@ import {
   projectAnthropicTools,
   reconcileAnthropicToolChoice,
   requiresClaudeAdaptiveThinking,
-  requiresClaudeBetweenToolsThinking,
   resolveClaudeNativeThinkingLevelMap,
   resolveClaudeSonnet5ModelIdentity,
   resolveOriginalAnthropicToolName,
@@ -46,6 +45,9 @@ import {
   extractToolResultBlockText,
   extractToolResultText,
 } from "@openclaw/ai/internal/shared";
+// Fork releases install @openclaw/ai from npm (upstream), so a fork-only helper
+// imported from it fails to link at runtime. @openclaw/llm-core is bundled.
+import { requiresClaudeBetweenToolsThinking } from "@openclaw/llm-core";
 /**
  * Native Anthropic Messages streaming transport.
  * Converts OpenClaw contexts/tools into Anthropic payloads, streams SSE events
