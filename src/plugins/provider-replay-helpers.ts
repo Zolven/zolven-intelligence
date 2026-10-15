@@ -1,4 +1,5 @@
 // Provides shared replay-policy helpers for provider plugins.
+import { resolveClaudeSonnet55ModelIdentity } from "@openclaw/llm-core";
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
 import type { AgentMessage } from "../agents/runtime/index.js";
 import { sanitizeGoogleAssistantFirstOrdering } from "../shared/google-turn-ordering.js";
@@ -121,6 +122,12 @@ export function shouldPreserveThinkingBlocks(modelId?: string): boolean {
     id.includes("sonnet-4") ||
     id.includes("haiku-4")
   ) {
+    return true;
+  }
+
+  // Sonnet 5.5 binds thinking to the conversation. Dropping old blocks rewrites a
+  // thinking-only turn as omitted-reasoning text, which invalidates every later block.
+  if (resolveClaudeSonnet55ModelIdentity({ id })) {
     return true;
   }
 

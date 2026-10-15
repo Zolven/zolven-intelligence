@@ -748,43 +748,57 @@ describe("anthropic provider replay hooks", () => {
     });
   });
 
-  it("rolls Claude Sonnet 5 to standard pricing on September 1, 2026", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(Date.UTC(2026, 8, 1));
-    try {
-      const provider = await registerSingleProviderPlugin(anthropicPlugin);
-      const model = {
-        id: "claude-sonnet-5",
-        name: "Claude Sonnet 5",
-        provider: "anthropic",
-        api: "anthropic-messages",
-        reasoning: true,
-        input: ["text", "image"],
-        cost: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
-        contextWindow: 1_000_000,
-        contextTokens: 1_000_000,
-        maxTokens: 128_000,
-        thinkingLevelMap: { xhigh: "xhigh", max: "max" },
-      } as ProviderRuntimeModel;
+  it.each([
+    {
+      modelId: "claude-sonnet-5",
+      datedModelId: "claude-sonnet-5-20260901",
+      cost: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
+    },
+    {
+      modelId: "claude-sonnet-5-5",
+      datedModelId: "claude-sonnet-5-5@20261001",
+      cost: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
+    },
+  ])(
+    "prices $modelId at Anthropic's standard rate after the cancelled September 2026 rise",
+    async ({ modelId, datedModelId, cost }) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.UTC(2026, 9, 15));
+      try {
+        const provider = await registerSingleProviderPlugin(anthropicPlugin);
+        const model = {
+          id: modelId,
+          name: modelId,
+          provider: "anthropic",
+          api: "anthropic-messages",
+          reasoning: true,
+          input: ["text", "image"],
+          cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+          contextWindow: 1_000_000,
+          contextTokens: 1_000_000,
+          maxTokens: 128_000,
+          thinkingLevelMap: { xhigh: "xhigh", max: "max" },
+        } as ProviderRuntimeModel;
 
-      expect(
-        provider.normalizeResolvedModel?.({
-          provider: "anthropic",
-          modelId: model.id,
-          model,
-        } as never)?.cost,
-      ).toEqual({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 });
-      expect(
-        provider.resolveDynamicModel?.({
-          provider: "anthropic",
-          modelId: "claude-sonnet-5-20260901",
-          modelRegistry: createModelRegistry([]),
-        } as ProviderResolveDynamicModelContext)?.cost,
-      ).toEqual({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+        expect(
+          provider.normalizeResolvedModel?.({
+            provider: "anthropic",
+            modelId: model.id,
+            model,
+          } as never)?.cost,
+        ).toEqual(cost);
+        expect(
+          provider.resolveDynamicModel?.({
+            provider: "anthropic",
+            modelId: datedModelId,
+            modelRegistry: createModelRegistry([]),
+          } as ProviderResolveDynamicModelContext)?.cost,
+        ).toEqual(cost);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it("does not apply direct API pricing to Claude CLI Sonnet 5", async () => {
     const provider = await registerSingleProviderPlugin(anthropicPlugin);

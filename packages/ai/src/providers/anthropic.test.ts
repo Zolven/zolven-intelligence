@@ -2324,6 +2324,7 @@ describe("Anthropic provider", () => {
   it.each([
     {
       name: "defaults to adaptive high",
+      modelId: "claude-sonnet-5",
       reasoning: undefined,
       thinking: { type: "adaptive", display: "summarized" },
       effort: { effort: "high" },
@@ -2331,27 +2332,104 @@ describe("Anthropic provider", () => {
     },
     {
       name: "allows explicit off",
+      modelId: "claude-sonnet-5",
       reasoning: "off" as const,
       thinking: { type: "disabled" },
       effort: undefined,
       toolChoice: { type: "any" },
     },
-  ])("supports Claude Sonnet 5: $name", async ({ reasoning, thinking, effort, toolChoice }) => {
-    let capturedPayload: Record<string, unknown> | undefined;
-    const stream = streamSimpleAnthropic(
-      makeAnthropicModel({
-        id: "claude-sonnet-5",
-        name: "Claude Sonnet 5",
-        maxTokens: 128_000,
-      }),
-      makeSonnet5PrefillContext(),
+    {
+      name: "defaults to adaptive high",
+      modelId: "claude-sonnet-5-5",
+      reasoning: undefined,
+      thinking: { type: "adaptive", display: "summarized" },
+      effort: { effort: "high" },
+      toolChoice: { type: "auto" },
+    },
+    {
+      name: "turns explicit off into between_tools without forced tool choice",
+      modelId: "claude-sonnet-5-5",
+      reasoning: "off" as const,
+      thinking: { type: "between_tools" },
+      effort: undefined,
+      toolChoice: { type: "auto" },
+    },
+  ])(
+    "supports Claude $modelId: $name",
+    async ({ modelId, reasoning, thinking, effort, toolChoice }) => {
+      let capturedPayload: Record<string, unknown> | undefined;
+      const stream = streamSimpleAnthropic(
+        makeAnthropicModel({
+          id: modelId,
+          name: modelId,
+          maxTokens: 128_000,
+        }),
+        makeSonnet5PrefillContext(),
+        {
+          apiKey: "sk-ant-provider",
+          reasoning,
+          temperature: 0.2,
+          toolChoice: "any",
+          onPayload: (payload) => {
+            capturedPayload = payload as unknown as Record<string, unknown>;
+            throw new Error("stop before network");
+          },
+        },
+      );
+
+      await stream.result();
+
+      expect(capturedPayload).toMatchObject({
+        max_tokens: 128_000,
+        messages: [{ role: "user" }],
+        tool_choice: toolChoice,
+      });
+      expect(capturedPayload?.thinking).toEqual(thinking);
+      expect(capturedPayload).not.toHaveProperty("temperature");
+      if (effort) {
+        expect(capturedPayload).toMatchObject({ output_config: effort });
+      } else {
+        expect(capturedPayload).not.toHaveProperty("output_config");
+      }
+    },
+  );
+
+  it("replays Claude Sonnet 5.5 thinking unchanged when thinking is explicitly off", async () => {
+    let capturedPayload: unknown;
+    const stream = streamAnthropic(
+      makeAnthropicModel({ id: "claude-sonnet-5-5", name: "claude-sonnet-5-5" }),
+      {
+        messages: [
+          { role: "user", content: "hello", timestamp: 0 },
+          {
+            role: "assistant",
+            provider: "anthropic",
+            api: "anthropic-messages",
+            model: "claude-sonnet-5-5",
+            stopReason: "stop",
+            timestamp: 0,
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            content: [
+              { type: "thinking", thinking: "progress note", thinkingSignature: "sig_1" },
+              { type: "text", text: "Visible answer." },
+            ],
+          },
+          { role: "user", content: "again", timestamp: 0 },
+        ],
+      },
       {
         apiKey: "sk-ant-provider",
-        reasoning,
-        temperature: 0.2,
+        thinkingEnabled: false,
         toolChoice: "any",
         onPayload: (payload) => {
-          capturedPayload = payload as unknown as Record<string, unknown>;
+          capturedPayload = payload;
           throw new Error("stop before network");
         },
       },
@@ -2359,17 +2437,16 @@ describe("Anthropic provider", () => {
 
     await stream.result();
 
-    expect(capturedPayload).toMatchObject({
-      max_tokens: 128_000,
-      messages: [{ role: "user" }],
-      thinking,
-      tool_choice: toolChoice,
-    });
-    expect(capturedPayload).not.toHaveProperty("temperature");
-    if (effort) {
-      expect(capturedPayload).toMatchObject({ output_config: effort });
-    } else {
-      expect(capturedPayload).not.toHaveProperty("output_config");
-    }
+    const payload = capturedPayload as {
+      messages: Array<{ role: string; content: unknown[] }>;
+      thinking?: unknown;
+      tool_choice?: unknown;
+    };
+    expect(payload.thinking).toEqual({ type: "between_tools" });
+    expect(payload.tool_choice).toEqual({ type: "auto" });
+    expect(payload.messages.find((message) => message.role === "assistant")?.content).toEqual([
+      { type: "thinking", thinking: "progress note", signature: "sig_1" },
+      { type: "text", text: "Visible answer." },
+    ]);
   });
 });

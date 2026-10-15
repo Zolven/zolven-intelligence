@@ -3477,6 +3477,7 @@ describe("anthropic transport stream", () => {
   it.each([
     {
       name: "defaults to adaptive high",
+      modelId: "claude-sonnet-5",
       reasoning: undefined,
       thinking: { type: "adaptive", display: "summarized" },
       effort: { effort: "high" },
@@ -3484,15 +3485,32 @@ describe("anthropic transport stream", () => {
     },
     {
       name: "allows explicit off",
+      modelId: "claude-sonnet-5",
       reasoning: "off" as const,
       thinking: { type: "disabled" },
       effort: undefined,
       toolChoice: { type: "any" },
     },
-  ])("supports Claude Sonnet 5 transport: $name", async (testCase) => {
+    {
+      name: "defaults to adaptive high",
+      modelId: "claude-sonnet-5-5",
+      reasoning: undefined,
+      thinking: { type: "adaptive", display: "summarized" },
+      effort: { effort: "high" },
+      toolChoice: { type: "auto" },
+    },
+    {
+      name: "turns explicit off into between_tools without forced tool choice",
+      modelId: "claude-sonnet-5-5",
+      reasoning: "off" as const,
+      thinking: { type: "between_tools" },
+      effort: undefined,
+      toolChoice: { type: "auto" },
+    },
+  ])("supports Claude $modelId transport: $name", async (testCase) => {
     const model = makeAnthropicTransportModel({
-      id: "claude-sonnet-5",
-      name: "Claude Sonnet 5",
+      id: testCase.modelId,
+      name: testCase.modelId,
       maxTokens: 128_000,
     });
 
@@ -3507,15 +3525,47 @@ describe("anthropic transport stream", () => {
     expect(payload).toMatchObject({
       max_tokens: 128_000,
       messages: [{ role: "user" }],
-      thinking: testCase.thinking,
       tool_choice: testCase.toolChoice,
     });
+    expect(payload.thinking).toEqual(testCase.thinking);
     expect(payload).not.toHaveProperty("temperature");
     if (testCase.effort) {
       expect(payload.output_config).toEqual(testCase.effort);
     } else {
       expect(payload).not.toHaveProperty("output_config");
     }
+  });
+
+  it("replays Claude Sonnet 5.5 thinking unchanged when the current request turns thinking off", async () => {
+    await runTransportStream(
+      makeAnthropicTransportModel({ id: "claude-sonnet-5-5", name: "claude-sonnet-5-5" }),
+      {
+        messages: [
+          { role: "user", content: "hello" },
+          {
+            role: "assistant",
+            provider: "anthropic",
+            api: "anthropic-messages",
+            model: "claude-sonnet-5-5",
+            stopReason: "stop",
+            timestamp: 0,
+            content: [
+              { type: "thinking", thinking: "progress note", thinkingSignature: "sig_1" },
+              { type: "text", text: "Visible answer." },
+            ],
+          },
+          { role: "user", content: "again" },
+        ],
+      } as AnthropicStreamContext,
+      { apiKey: "sk-ant-api", reasoning: "off" } as AnthropicStreamOptions,
+    );
+
+    const payload = latestAnthropicRequest().payload;
+    expect(payload.thinking).toEqual({ type: "between_tools" });
+    expect(findRecord(payload.messages, (record) => record.role === "assistant").content).toEqual([
+      { type: "thinking", thinking: "progress note", signature: "sig_1" },
+      { type: "text", text: "Visible answer." },
+    ]);
   });
 
   it("uses always-on adaptive thinking for Claude Fable 5 transport runs", async () => {
